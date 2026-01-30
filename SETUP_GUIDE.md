@@ -1,55 +1,98 @@
-# Webhook Monitor Setup Guide for cPanel
+# VoIP.ms Webhook Monitor - Setup Guide
 
-## Quick Setup (3 minutes)
+## Quick Setup (5 minutes)
 
-### Step 1: Get Your Slack Bot Token
+### Step 1: Create a Slack App
 
 1. Go to https://api.slack.com/apps
-2. Click **"Create New App"** → **"From scratch"**
-3. Name it "Status Monitor" and select your workspace
+2. Click **"Create New App"** > **"From scratch"**
+3. Name it "VoIP Status Monitor" and select your workspace
 4. In the left sidebar, click **"OAuth & Permissions"**
 5. Scroll to **"Bot Token Scopes"** and add:
    - `chat:write` (required)
 6. Scroll up and click **"Install to Workspace"**
 7. Copy the **"Bot User OAuth Token"** (starts with `xoxb-`)
-8. Go to Slack and invite the bot to your channel:
-   - Type `/invite @Status Monitor` in your channel
+8. Invite the bot to your alerts channel:
+   ```
+   /invite @VoIP Status Monitor
+   ```
 
 ### Step 2: Upload to cPanel
 
 1. Log into your cPanel
 2. Open **"File Manager"**
-3. Navigate to `public_html` (or wherever you want)
+3. Navigate to `public_html` (or your preferred directory)
 4. Click **"Upload"** and upload `webhook.php`
 5. Right-click the file and select **"Edit"**
-6. Update these lines at the top:
+6. Update the configuration section:
    ```php
    define('SLACK_BOT_TOKEN', 'xoxb-your-actual-bot-token');
-   define('SLACK_CHANNEL', '#alerts');  // or channel ID
+   define('SLACK_CHANNEL', '#alerts');  // or use channel ID like C1234567890
    ```
 7. Save the file
 
-### Step 3: Configure Your VoIP.ms (or Status Page) Webhook
+### Step 3: Configure the Webhook Source
 
-**For VoIP.ms:**
-1. Log into VoIP.ms account
-2. Go to your webhook settings
-3. Enter webhook URL: `https://yourdomain.com/webhook.php`
-4. Save
+**For VoIP.ms Status Page:**
+1. If VoIP.ms provides webhook subscriptions, configure them to send to:
+   ```
+   https://yourdomain.com/webhook.php
+   ```
 
-**For Status Page (Instatus, etc):**
+**For Instatus / Statuspage.io:**
 1. Go to your status page dashboard
 2. Navigate to **Webhooks** or **Integrations**
 3. Click **"Add Webhook"**
 4. Enter your webhook URL: `https://yourdomain.com/webhook.php`
-5. Subscribe to: **Incidents**, **Components**, and optionally **Maintenance**
+5. Subscribe to: **Incidents**, **Components**, and **Maintenance**
 6. Save the webhook
 
 ### Step 4: Test It
 
-1. Create a test incident with "New York" in the name
-2. Check your Slack channel for the notification
-3. Check the log file: `public_html/webhook.log` for debugging
+1. Open `test.html` in your browser (upload it alongside webhook.php, or open locally)
+2. Enter your webhook URL
+3. Select "NY Incident - Major Outage" and click **Send Test Webhook**
+4. Check your Slack channel for the notification
+5. Check `webhook.log` in cPanel File Manager for debugging
+
+---
+
+## What Gets Monitored
+
+The webhook monitors and alerts on:
+
+| Event Type | Triggers Alert |
+|------------|----------------|
+| New York server incidents | Yes |
+| New York component updates | Yes |
+| New York scheduled maintenance | Yes |
+| Service-wide/platform-wide incidents | Yes |
+| DDoS attacks | Yes |
+| Billing/payment system issues | Yes |
+| SIP registration problems | Yes |
+| DNS/authentication issues | Yes |
+| Critical severity incidents (any location) | Yes |
+| Other locations (London, LA, Chicago, etc.) | No |
+
+### New York Detection Keywords
+
+The script detects New York references using these keywords:
+- `new york`, `newyork`, `new-york`, `new_york`
+- `nyc`, `ny server`, `ny-server`
+- `ny-1` through `ny-5`, `ny1` through `ny5`
+- `newyork1`, `newyork2`, `newyork3`
+- `us-east`, `us east`, `east-us`, `east coast`
+
+### Service-Wide Detection Keywords
+
+These keywords trigger alerts regardless of location:
+- `all server`, `all service`, `platform wide`, `service wide`
+- `global outage`, `major outage`, `complete outage`
+- `ddos`, `dos attack`, `security incident`
+- `billing`, `payment`, `portal`, `control panel`
+- `sip registration`, `dns issue`, `authentication`, `login issue`
+
+---
 
 ## Troubleshooting
 
@@ -63,8 +106,8 @@ public_html/webhook.log
 **Common issues:**
 
 1. **Bot token incorrect**
-   - Make sure it starts with `xoxb-`
-   - No extra spaces or quotes
+   - Must start with `xoxb-`
+   - No extra spaces or quotes around the token
 
 2. **Bot not in channel**
    - Go to Slack and type: `/invite @YourBotName`
@@ -78,146 +121,164 @@ public_html/webhook.log
 
 ### Webhook not receiving data?
 
-1. **Check webhook URL is correct**
-   - Should be: `https://yourdomain.com/webhook.php`
-   - Must use HTTPS (not HTTP)
+1. **Check webhook URL format**
+   - Must be HTTPS (not HTTP)
+   - Example: `https://yourdomain.com/webhook.php`
 
 2. **Check file permissions**
    - Right-click `webhook.php` in cPanel File Manager
    - Click "Change Permissions"
    - Set to 644
 
-3. **View the log file**
-   - Check `webhook.log` in the same directory
-   - Look for error messages
+3. **Check webhook.log**
+   - Look for incoming request logs
+   - Check for error messages
 
-4. **Check webhook format**
-   - The webhook must send JSON data
-   - Common services: VoIP.ms, Instatus, etc.
-
-### Optional: Add IP Whitelist for Extra Security
-
-If you know the IPs that will send webhooks (e.g., VoIP.ms servers), you can add them to the whitelist in the PHP file:
-
-```php
-define('ALLOWED_IPS', ['1.2.3.4', '5.6.7.8']);
-```
-
-This adds an extra security layer since there's no signature verification.
-
-### Testing the webhook manually
-
-You can test using cURL from your computer:
+### Testing manually with cURL
 
 ```bash
-# Replace with your actual URL
+# Set your webhook URL
 WEBHOOK_URL="https://yourdomain.com/webhook.php"
 
-# Test payload
-PAYLOAD='{"incident":{"name":"New York Server Test","status":"INVESTIGATING","impact":"major","created_at":"2026-01-30T12:00:00Z","incident_updates":[{"body":"Testing webhook"}]}}'
-
-# Send test webhook
+# Test NY incident
 curl -X POST "$WEBHOOK_URL" \
   -H "Content-Type: application/json" \
-  -d "$PAYLOAD"
+  -d '{"incident":{"name":"New York Server Test","status":"INVESTIGATING","impact":"major","incident_updates":[{"body":"Test message"}]}}'
+
+# Test service-wide incident
+curl -X POST "$WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"incident":{"name":"Platform Issue","status":"INVESTIGATING","impact":"major","incident_updates":[{"body":"All servers experiencing issues"}]}}'
+
+# Test maintenance
+curl -X POST "$WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"maintenance":{"name":"NY Server Maintenance","status":"SCHEDULED","scheduled_for":"2024-01-15T02:00:00Z","scheduled_until":"2024-01-15T04:00:00Z"}}'
 ```
 
-You should receive:
-- HTTP 200 response
-- A Slack notification in your channel
-- An entry in `webhook.log`
+---
 
-## Security Notes
+## Security Recommendations
 
-- ✅ Always use HTTPS for your webhook URL
-- ✅ Never share your Slack bot token
-- ✅ Consider adding IP whitelist in the script for extra security
-- ✅ Consider restricting file permissions to 644
-- ⚠️ Note: VoIP.ms webhooks don't have signature verification, so IP whitelisting is recommended if you know their server IPs
+1. **Always use HTTPS** for your webhook URL
+2. **Never share your Slack bot token**
+3. **Add IP whitelist** if you know the source IPs:
+   ```php
+   define('ALLOWED_IPS', ['1.2.3.4', '5.6.7.8']);
+   ```
+4. **Set file permissions** to 644 for webhook.php
+5. **Protect webhook.log** - consider moving it outside public_html or adding .htaccess protection
+
+---
 
 ## Customization
 
-### Change New York keywords
+### Add or modify New York keywords
 
-Edit this section in `webhook.php`:
+Edit the `isNewYorkRelated()` function in `webhook.php`:
 
 ```php
-$keywords = ['new york', 'newyork', 'ny server', 'nyc', 'new-york', 'ny-1'];
+$keywords = [
+    'new york', 'newyork', 'new-york', 'new_york',
+    'nyc', 'ny server', 'ny-server',
+    // Add your custom keywords here
+    'your-custom-keyword',
+];
 ```
 
-### Alert on maintenance too
+### Add or modify service-wide keywords
 
-Find this section and modify:
+Edit the `isServiceWideIncident()` function in `webhook.php`:
 
 ```php
-elseif (isset($data['maintenance'])) {
-    // Currently only logs, doesn't alert
-    // To enable alerts, uncomment:
-    // if (isNewYorkRelated($maintenanceName)) {
-    //     $shouldAlert = true;
-    //     $message = formatMaintenance($data);
-    // }
-}
+$serviceWideKeywords = [
+    'all server', 'all service', 'platform wide',
+    // Add your custom keywords here
+    'your-custom-keyword',
+];
 ```
 
 ### Change Slack message colors
 
-Edit the color codes in the `formatIncident()` and `formatComponent()` functions.
+Edit the color codes in `formatIncident()`, `formatComponent()`, or `formatMaintenance()`:
+
+```php
+$color = '#d63031';  // Red for critical
+$color = '#fdcb6e';  // Yellow for warning
+$color = '#00b894';  // Green for resolved
+$color = '#0984e3';  // Blue for info
+```
+
+### Disable maintenance alerts
+
+To stop alerting on maintenance, find this section in the main execution block and comment it out:
+
+```php
+// Check for maintenance - alert if NY related
+elseif (isset($data['maintenance'])) {
+    // Comment out or remove the alerting logic
+}
+```
+
+---
 
 ## File Structure
 
 ```
 public_html/
-├── webhook.php       (your webhook script)
-└── webhook.log       (auto-generated log file)
+├── webhook.php       # Main webhook handler
+├── webhook.log       # Auto-generated log file
+└── test.html         # Optional: testing interface
 ```
+
+---
 
 ## Viewing Logs
 
-To view recent logs via cPanel:
-
+### Via cPanel File Manager:
 1. Open **File Manager**
 2. Navigate to your webhook directory
 3. Right-click `webhook.log`
 4. Select **"View"** or **"Edit"**
 
-Or via SSH (if enabled):
+### Via SSH (if enabled):
 ```bash
+# View last 50 lines
+tail -50 ~/public_html/webhook.log
+
+# Follow log in real-time
 tail -f ~/public_html/webhook.log
 ```
 
-## Support
-
-If you encounter issues:
-
-1. Check `webhook.log` for error messages
-2. Verify all configuration values are correct
-3. Test with a manual curl request (see above)
-4. Ensure your hosting supports:
-   - PHP 7.4 or higher
-   - PHP curl extension
-   - HTTPS/SSL
-
-## What Gets Monitored?
-
-The script will send Slack alerts for:
-
-- ✅ Incidents mentioning "New York" in the title
-- ✅ Incidents with "New York" in update messages
-- ✅ Component updates for components with "New York" in name
-- ❌ Maintenance events (logged but not alerted by default)
-- ❌ Other servers/locations (ignored completely)
-
-## Example Slack Alerts
-
-**Major Incident:**
+### Log format:
 ```
-🔴 New York Server Incident
+[2024-01-15 10:30:45] Received webhook from 1.2.3.4
+[2024-01-15 10:30:45] New York incident detected (name match): NY Server Issues
+[2024-01-15 10:30:45] Slack notification sent successfully
+```
+
+---
+
+## Requirements
+
+- PHP 7.4 or higher
+- PHP curl extension enabled
+- HTTPS/SSL certificate
+- Slack workspace with bot permissions
+
+---
+
+## Example Slack Notifications
+
+### Major Incident
+```
+[Red indicator]
+New York Server Incident
 
 Incident: New York Server Connection Issues
 Status: INVESTIGATING
 Impact: MAJOR
-Created: 2026-01-30T12:00:00Z
+Created: 2024-01-15T10:30:00Z
 
 Latest Update:
 We are investigating connection issues affecting our New York datacenter.
@@ -225,17 +286,50 @@ We are investigating connection issues affecting our New York datacenter.
 [View Incident Details]
 ```
 
-**Resolved:**
+### Service-Wide Alert
 ```
-🟢 New York Server Incident
+[Red indicator]
+Service-Wide Alert
+
+Incident: Platform Connectivity Issues
+Status: INVESTIGATING
+Impact: MAJOR
+Created: 2024-01-15T10:30:00Z
+
+Latest Update:
+All servers are experiencing connectivity issues.
+
+[View Incident Details]
+```
+
+### Scheduled Maintenance
+```
+[Blue indicator]
+Scheduled Maintenance Alert
+
+Maintenance: New York Server Maintenance
+Status: SCHEDULED
+Scheduled Start: 2024-01-16T02:00:00Z
+Scheduled End: 2024-01-16T04:00:00Z
+
+Details:
+Scheduled maintenance window for NY1 and NY2 servers.
+
+[View Maintenance Details]
+```
+
+### Resolved Incident
+```
+[Green indicator]
+New York Server Incident
 
 Incident: New York Server Connection Issues
 Status: RESOLVED
 Impact: MAJOR
-Created: 2026-01-30T12:00:00Z
+Created: 2024-01-15T10:30:00Z
 
 Latest Update:
-All services have been restored.
+All services have been restored. Thank you for your patience.
 
 [View Incident Details]
 ```
