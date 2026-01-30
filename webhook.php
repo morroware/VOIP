@@ -1,8 +1,14 @@
 <?php
 /**
- * Webhook Monitor for New York Server
- * Reports New York server incidents to Slack
- * 
+ * VoIP.ms Webhook Monitor
+ * Reports relevant incidents to Slack
+ *
+ * Alerts on:
+ * - New York server incidents, components, and maintenance
+ * - Service-wide/platform-wide incidents affecting all users
+ * - Critical severity incidents
+ * - Core infrastructure issues (SIP, DNS, billing, authentication)
+ *
  * Installation:
  * 1. Upload this file to your cPanel (e.g., public_html/webhook.php)
  * 2. Update the configuration below
@@ -48,16 +54,90 @@ function isNewYorkRelated($text) {
     if (empty($text)) {
         return false;
     }
-    
+
     $text = strtolower($text);
-    $keywords = ['new york', 'newyork', 'ny server', 'nyc', 'new-york', 'ny-1'];
-    
+    $keywords = [
+        'new york', 'newyork', 'new-york', 'new_york',
+        'nyc', 'ny server', 'ny-server',
+        'ny-1', 'ny-2', 'ny-3', 'ny-4', 'ny-5',
+        'ny1', 'ny2', 'ny3', 'ny4', 'ny5',
+        'newyork1', 'newyork2', 'newyork3',
+        'us-east', 'us east', 'east-us', 'east coast'
+    ];
+
     foreach ($keywords as $keyword) {
         if (strpos($text, $keyword) !== false) {
             return true;
         }
     }
-    
+
+    return false;
+}
+
+// Check if this is a service-wide or critical incident that affects everyone
+function isServiceWideIncident($data) {
+    $text = '';
+
+    // Gather all relevant text from the incident
+    if (isset($data['incident'])) {
+        $incident = $data['incident'];
+        $text .= ' ' . ($incident['name'] ?? '');
+        $text .= ' ' . ($incident['impact'] ?? '');
+
+        foreach ($incident['incident_updates'] ?? [] as $update) {
+            $text .= ' ' . ($update['body'] ?? '');
+        }
+    }
+
+    $text = strtolower($text);
+
+    // Keywords indicating service-wide issues
+    $serviceWideKeywords = [
+        'all server', 'all service', 'platform wide', 'platform-wide',
+        'service wide', 'service-wide', 'global outage', 'major outage',
+        'complete outage', 'total outage', 'network wide', 'network-wide',
+        'all customer', 'all user', 'everyone', 'entire network',
+        'all location', 'all datacenter', 'all data center',
+        'ddos', 'dos attack', 'security incident',
+        'billing', 'payment', 'portal', 'control panel', 'customer portal',
+        'api outage', 'api down', 'authentication', 'login issue',
+        'sip registration', 'registration issue', 'dns issue', 'dns outage'
+    ];
+
+    foreach ($serviceWideKeywords as $keyword) {
+        if (strpos($text, $keyword) !== false) {
+            return true;
+        }
+    }
+
+    // Also alert on critical/major impact regardless of keywords
+    $impact = strtolower($data['incident']['impact'] ?? '');
+    if ($impact === 'critical') {
+        return true;
+    }
+
+    return false;
+}
+
+// Check affected components array for New York
+function hasNewYorkComponent($data) {
+    $components = [];
+
+    // Check incident's affected components
+    if (isset($data['incident']['components'])) {
+        $components = array_merge($components, $data['incident']['components']);
+    }
+    if (isset($data['incident']['affected_components'])) {
+        $components = array_merge($components, $data['incident']['affected_components']);
+    }
+
+    foreach ($components as $component) {
+        $name = is_array($component) ? ($component['name'] ?? '') : $component;
+        if (isNewYorkRelated($name)) {
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -100,11 +180,11 @@ function sendToSlack($blocks, $color) {
 }
 
 // Format incident for Slack
-function formatIncident($data) {
+function formatIncident($data, $isServiceWide = false) {
     $incident = $data['incident'];
     $impact = strtolower($incident['impact'] ?? '');
     $status = strtolower($incident['status'] ?? '');
-    
+
     // Determine emoji and color
     if (in_array($impact, ['critical', 'major']) || strpos($status, 'outage') !== false) {
         $emoji = '🔴';
@@ -119,16 +199,19 @@ function formatIncident($data) {
         $emoji = '🔵';
         $color = '#0984e3';
     }
-    
+
     $updates = $incident['incident_updates'] ?? [];
     $latestUpdate = !empty($updates) ? $updates[0]['body'] ?? '' : '';
-    
+
+    // Header text based on incident type
+    $headerText = $isServiceWide ? "$emoji Service-Wide Alert" : "$emoji New York Server Incident";
+
     $blocks = [
         [
             'type' => 'header',
             'text' => [
                 'type' => 'plain_text',
-                'text' => "$emoji New York Server Incident",
+                'text' => $headerText,
                 'emoji' => true
             ]
         ],
@@ -235,6 +318,85 @@ function formatComponent($data) {
     return ['blocks' => $blocks, 'color' => $config['color']];
 }
 
+// Format maintenance for Slack
+function formatMaintenance($data) {
+    $maintenance = $data['maintenance'];
+    $status = strtoupper($maintenance['status'] ?? 'SCHEDULED');
+
+    // Determine emoji and color based on maintenance status
+    $statusConfig = [
+        'SCHEDULED' => ['emoji' => '🔵', 'color' => '#0984e3'],
+        'INPROGRESS' => ['emoji' => '🟠', 'color' => '#e17055'],
+        'IN_PROGRESS' => ['emoji' => '🟠', 'color' => '#e17055'],
+        'VERIFYING' => ['emoji' => '🟡', 'color' => '#fdcb6e'],
+        'COMPLETED' => ['emoji' => '🟢', 'color' => '#00b894']
+    ];
+
+    $config = $statusConfig[$status] ?? ['emoji' => '🔵', 'color' => '#0984e3'];
+
+    $scheduledStart = $maintenance['scheduled_for'] ?? $maintenance['scheduled_start_time'] ?? 'N/A';
+    $scheduledEnd = $maintenance['scheduled_until'] ?? $maintenance['scheduled_end_time'] ?? 'N/A';
+
+    $blocks = [
+        [
+            'type' => 'header',
+            'text' => [
+                'type' => 'plain_text',
+                'text' => "{$config['emoji']} Scheduled Maintenance Alert",
+                'emoji' => true
+            ]
+        ],
+        [
+            'type' => 'section',
+            'fields' => [
+                [
+                    'type' => 'mrkdwn',
+                    'text' => "*Maintenance:*\n" . ($maintenance['name'] ?? 'N/A')
+                ],
+                [
+                    'type' => 'mrkdwn',
+                    'text' => "*Status:*\n" . $status
+                ],
+                [
+                    'type' => 'mrkdwn',
+                    'text' => "*Scheduled Start:*\n" . $scheduledStart
+                ],
+                [
+                    'type' => 'mrkdwn',
+                    'text' => "*Scheduled End:*\n" . $scheduledEnd
+                ]
+            ]
+        ]
+    ];
+
+    // Add maintenance updates if available
+    $updates = $maintenance['maintenance_updates'] ?? $maintenance['incident_updates'] ?? [];
+    if (!empty($updates)) {
+        $latestUpdate = $updates[0]['body'] ?? '';
+        if (!empty($latestUpdate)) {
+            $blocks[] = [
+                'type' => 'section',
+                'text' => [
+                    'type' => 'mrkdwn',
+                    'text' => "*Details:*\n$latestUpdate"
+                ]
+            ];
+        }
+    }
+
+    if (!empty($maintenance['url'])) {
+        $blocks[] = [
+            'type' => 'section',
+            'text' => [
+                'type' => 'mrkdwn',
+                'text' => "<{$maintenance['url']}|View Maintenance Details>"
+            ]
+        ];
+    }
+
+    return ['blocks' => $blocks, 'color' => $config['color']];
+}
+
 // Main execution
 try {
     // Check IP whitelist (if configured)
@@ -259,60 +421,88 @@ try {
     }
     
     logMessage("✓ Received webhook from " . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
-    
+
     $shouldAlert = false;
+    $isServiceWide = false;
     $message = null;
-    
+
     // Check for incident
     if (isset($data['incident'])) {
         $incident = $data['incident'];
         $incidentName = $incident['name'] ?? '';
-        
+
+        // Check 1: Is it New York related?
         if (isNewYorkRelated($incidentName)) {
             $shouldAlert = true;
-        } else {
-            // Check incident updates
+            logMessage("→ New York incident detected (name match): $incidentName");
+        }
+
+        // Check 2: Check incident updates for NY mentions
+        if (!$shouldAlert) {
             foreach ($incident['incident_updates'] ?? [] as $update) {
                 if (isNewYorkRelated($update['body'] ?? '')) {
                     $shouldAlert = true;
+                    logMessage("→ New York incident detected (update match): $incidentName");
                     break;
                 }
             }
         }
-        
+
+        // Check 3: Check affected components for NY
+        if (!$shouldAlert && hasNewYorkComponent($data)) {
+            $shouldAlert = true;
+            logMessage("→ New York incident detected (component match): $incidentName");
+        }
+
+        // Check 4: Is it a service-wide incident that affects everyone?
+        if (!$shouldAlert && isServiceWideIncident($data)) {
+            $shouldAlert = true;
+            $isServiceWide = true;
+            logMessage("→ Service-wide incident detected: $incidentName");
+        }
+
         if ($shouldAlert) {
-            logMessage("→ New York incident detected: $incidentName");
-            $message = formatIncident($data);
+            $message = formatIncident($data, $isServiceWide);
         }
     }
-    
+
     // Check for component update
     elseif (isset($data['component'])) {
         $component = $data['component'];
         $componentName = $component['name'] ?? '';
-        
+
         if (isNewYorkRelated($componentName)) {
             $shouldAlert = true;
             logMessage("→ New York component update: $componentName");
             $message = formatComponent($data);
         }
     }
-    
-    // Check for maintenance (optional - logs but doesn't alert)
+
+    // Check for maintenance - alert if NY related
     elseif (isset($data['maintenance'])) {
         $maintenance = $data['maintenance'];
         $maintenanceName = $maintenance['name'] ?? '';
-        
-        if (isNewYorkRelated($maintenanceName)) {
-            logMessage("→ New York maintenance: $maintenanceName (not alerting)");
+
+        // Check maintenance name and description for NY
+        $maintenanceText = $maintenanceName . ' ' . ($maintenance['description'] ?? '');
+        foreach ($maintenance['maintenance_updates'] ?? [] as $update) {
+            $maintenanceText .= ' ' . ($update['body'] ?? '');
+        }
+
+        if (isNewYorkRelated($maintenanceText)) {
+            $shouldAlert = true;
+            logMessage("→ New York maintenance detected: $maintenanceName");
+            $message = formatMaintenance($data);
+        } else {
+            logMessage("→ Maintenance not NY related, ignoring: $maintenanceName");
         }
     }
-    
+
     // Send to Slack if needed
     if ($shouldAlert && $message) {
         sendToSlack($message['blocks'], $message['color']);
     } elseif (!$shouldAlert) {
-        logMessage("→ Not New York related, ignoring");
+        logMessage("→ Not relevant to our service, ignoring");
     }
     
     // Return success response
