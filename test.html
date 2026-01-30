@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Webhook Monitor Test</title>
+    <title>VoIP.ms Webhook Monitor - Test Page</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-            max-width: 800px;
+            max-width: 900px;
             margin: 50px auto;
             padding: 20px;
             background: #f5f5f5;
@@ -21,6 +21,11 @@
         h1 {
             color: #333;
             margin-top: 0;
+        }
+        h2 {
+            color: #444;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
         }
         .test-section {
             margin: 30px 0;
@@ -42,6 +47,18 @@
             border-radius: 4px;
             font-size: 14px;
             box-sizing: border-box;
+        }
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        optgroup {
+            font-weight: bold;
+            color: #333;
         }
         button {
             background: #4CAF50;
@@ -78,6 +95,12 @@
             color: #721c24;
             display: block;
         }
+        .result.info {
+            background: #e7f3ff;
+            border: 1px solid #b6d4fe;
+            color: #084298;
+            display: block;
+        }
         code {
             background: #f4f4f4;
             padding: 2px 6px;
@@ -91,180 +114,524 @@
             margin: 20px 0;
             border-left: 4px solid #2196F3;
         }
+        .warning {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            border-left: 4px solid #ffc107;
+        }
+        .test-matrix {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .test-matrix th, .test-matrix td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        .test-matrix th {
+            background: #f5f5f5;
+        }
+        .test-matrix tr:nth-child(even) {
+            background: #fafafa;
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge-alert {
+            background: #d4edda;
+            color: #155724;
+        }
+        .badge-ignore {
+            background: #f8d7da;
+            color: #721c24;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔔 Webhook Monitor Test Page</h1>
-        
+        <h1>VoIP.ms Webhook Monitor - Test Page</h1>
+
         <div class="info">
-            <strong>ℹ️ Setup Instructions:</strong>
+            <strong>Setup Instructions:</strong>
             <ol>
-                <li>Make sure <code>webhook.php</code> is uploaded to your cPanel</li>
-                <li>Update the SLACK_BOT_TOKEN in the PHP file</li>
-                <li>Enter your webhook URL below and click "Send Test Webhook"</li>
+                <li>Upload <code>webhook.php</code> to your cPanel</li>
+                <li>Update <code>SLACK_BOT_TOKEN</code> and <code>SLACK_CHANNEL</code> in the PHP file</li>
+                <li>Enter your webhook URL below</li>
+                <li>Select a test scenario and click "Send Test Webhook"</li>
                 <li>Check your Slack channel for the notification</li>
             </ol>
         </div>
 
         <div class="test-section">
-            <h2>Test Webhook</h2>
-            
+            <h2>Send Test Webhook</h2>
+
             <label for="webhookUrl">Webhook URL:</label>
             <input type="text" id="webhookUrl" placeholder="https://yourdomain.com/webhook.php">
-            
-            <label for="testType">Test Type:</label>
-            <select id="testType" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-                <option value="incident">New York Incident (Major)</option>
-                <option value="resolved">New York Incident (Resolved)</option>
-                <option value="component">New York Component (Degraded)</option>
-                <option value="other">London Incident (Should NOT alert)</option>
+
+            <label for="testType">Test Scenario:</label>
+            <select id="testType">
+                <optgroup label="New York Server Tests (Should Alert)">
+                    <option value="ny_incident_major">NY Incident - Major Outage</option>
+                    <option value="ny_incident_resolved">NY Incident - Resolved</option>
+                    <option value="ny_component_degraded">NY Component - Degraded Performance</option>
+                    <option value="ny_component_outage">NY Component - Major Outage</option>
+                    <option value="ny_maintenance">NY Scheduled Maintenance</option>
+                    <option value="ny_in_update">NY Mentioned in Update (not title)</option>
+                    <option value="ny_affected_component">NY in Affected Components Array</option>
+                </optgroup>
+                <optgroup label="Service-Wide Tests (Should Alert)">
+                    <option value="service_wide_ddos">DDoS Attack Announced</option>
+                    <option value="service_wide_billing">Billing System Issue</option>
+                    <option value="service_wide_sip">SIP Registration Problems</option>
+                    <option value="service_wide_all_servers">All Servers Affected</option>
+                    <option value="critical_incident">Critical Severity Incident</option>
+                </optgroup>
+                <optgroup label="Non-Relevant Tests (Should NOT Alert)">
+                    <option value="london_incident">London Server Incident</option>
+                    <option value="la_maintenance">Los Angeles Maintenance</option>
+                    <option value="minor_other">Minor - Other Location</option>
+                </optgroup>
             </select>
-            
+
             <button onclick="sendTestWebhook()">Send Test Webhook</button>
-            
+
             <div id="result" class="result"></div>
         </div>
 
-        <div class="info">
-            <strong>📋 What to check:</strong>
+        <div class="warning">
+            <strong>Expected Behavior:</strong>
             <ul>
-                <li>Check your Slack channel for the notification</li>
-                <li>Check <code>webhook.log</code> in cPanel File Manager</li>
-                <li>Verify the webhook returns "received" status</li>
+                <li><span class="badge badge-alert">ALERTS</span> - New York incidents, components, maintenance</li>
+                <li><span class="badge badge-alert">ALERTS</span> - Service-wide issues (DDoS, billing, SIP, DNS, auth)</li>
+                <li><span class="badge badge-alert">ALERTS</span> - Critical severity incidents (any location)</li>
+                <li><span class="badge badge-ignore">IGNORES</span> - Other locations (London, LA, etc.)</li>
+            </ul>
+        </div>
+
+        <h2>Test Scenarios Reference</h2>
+        <table class="test-matrix">
+            <thead>
+                <tr>
+                    <th>Scenario</th>
+                    <th>Type</th>
+                    <th>Expected Result</th>
+                    <th>Slack Header</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>NY Incident - Major</td>
+                    <td>Incident</td>
+                    <td><span class="badge badge-alert">ALERT</span></td>
+                    <td>New York Server Incident</td>
+                </tr>
+                <tr>
+                    <td>NY Component Update</td>
+                    <td>Component</td>
+                    <td><span class="badge badge-alert">ALERT</span></td>
+                    <td>New York Server Component Update</td>
+                </tr>
+                <tr>
+                    <td>NY Maintenance</td>
+                    <td>Maintenance</td>
+                    <td><span class="badge badge-alert">ALERT</span></td>
+                    <td>Scheduled Maintenance Alert</td>
+                </tr>
+                <tr>
+                    <td>DDoS Attack</td>
+                    <td>Incident</td>
+                    <td><span class="badge badge-alert">ALERT</span></td>
+                    <td>Service-Wide Alert</td>
+                </tr>
+                <tr>
+                    <td>Billing Issue</td>
+                    <td>Incident</td>
+                    <td><span class="badge badge-alert">ALERT</span></td>
+                    <td>Service-Wide Alert</td>
+                </tr>
+                <tr>
+                    <td>Critical Severity</td>
+                    <td>Incident</td>
+                    <td><span class="badge badge-alert">ALERT</span></td>
+                    <td>Service-Wide Alert</td>
+                </tr>
+                <tr>
+                    <td>London Incident</td>
+                    <td>Incident</td>
+                    <td><span class="badge badge-ignore">IGNORE</span></td>
+                    <td>N/A (no alert)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="info">
+            <strong>Debugging Tips:</strong>
+            <ul>
+                <li>Check <code>webhook.log</code> in your cPanel File Manager for detailed logs</li>
+                <li>Log entries show why each webhook was processed or ignored</li>
+                <li>Verify your Slack bot is invited to the channel: <code>/invite @YourBotName</code></li>
             </ul>
         </div>
     </div>
 
     <script>
+        const testPayloads = {
+            // New York Server Tests
+            ny_incident_major: {
+                shouldAlert: true,
+                alertType: 'NY Incident',
+                payload: {
+                    incident: {
+                        name: "New York Server Connection Issues",
+                        status: "INVESTIGATING",
+                        impact: "major",
+                        created_at: new Date().toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/incidents/test",
+                        incident_updates: [{
+                            body: "We are investigating connection issues affecting our New York datacenter.",
+                            status: "INVESTIGATING",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            },
+            ny_incident_resolved: {
+                shouldAlert: true,
+                alertType: 'NY Incident (Resolved)',
+                payload: {
+                    incident: {
+                        name: "New York Server Connection Issues",
+                        status: "RESOLVED",
+                        impact: "major",
+                        created_at: new Date().toISOString(),
+                        resolved_at: new Date().toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/incidents/test",
+                        incident_updates: [{
+                            body: "All services have been restored. Thank you for your patience.",
+                            status: "RESOLVED",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            },
+            ny_component_degraded: {
+                shouldAlert: true,
+                alertType: 'NY Component',
+                payload: {
+                    component: {
+                        name: "NY1 - SIP Server",
+                        status: "DEGRADEDPERFORMANCE",
+                        created_at: new Date().toISOString(),
+                        id: "test-" + Date.now()
+                    },
+                    component_update: {
+                        new_status: "DEGRADEDPERFORMANCE",
+                        created_at: new Date().toISOString()
+                    },
+                    page: {
+                        url: "https://status.voip.ms"
+                    }
+                }
+            },
+            ny_component_outage: {
+                shouldAlert: true,
+                alertType: 'NY Component',
+                payload: {
+                    component: {
+                        name: "New York API Gateway",
+                        status: "MAJOROUTAGE",
+                        created_at: new Date().toISOString(),
+                        id: "test-" + Date.now()
+                    },
+                    component_update: {
+                        new_status: "MAJOROUTAGE",
+                        created_at: new Date().toISOString()
+                    },
+                    page: {
+                        url: "https://status.voip.ms"
+                    }
+                }
+            },
+            ny_maintenance: {
+                shouldAlert: true,
+                alertType: 'NY Maintenance',
+                payload: {
+                    maintenance: {
+                        name: "New York Server Maintenance",
+                        status: "SCHEDULED",
+                        scheduled_for: new Date(Date.now() + 86400000).toISOString(),
+                        scheduled_until: new Date(Date.now() + 90000000).toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/maintenance/test",
+                        maintenance_updates: [{
+                            body: "Scheduled maintenance window for NY1 and NY2 servers. Expected brief service interruption.",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            },
+            ny_in_update: {
+                shouldAlert: true,
+                alertType: 'NY in Update',
+                payload: {
+                    incident: {
+                        name: "Network Connectivity Issues",
+                        status: "INVESTIGATING",
+                        impact: "minor",
+                        created_at: new Date().toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/incidents/test",
+                        incident_updates: [{
+                            body: "We have identified the issue affecting the New York region. Working on a fix.",
+                            status: "IDENTIFIED",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            },
+            ny_affected_component: {
+                shouldAlert: true,
+                alertType: 'NY in Components',
+                payload: {
+                    incident: {
+                        name: "Regional Connectivity Issue",
+                        status: "INVESTIGATING",
+                        impact: "minor",
+                        created_at: new Date().toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/incidents/test",
+                        components: [
+                            { name: "NY1 SIP Server", status: "degraded_performance" },
+                            { name: "NY2 SIP Server", status: "degraded_performance" }
+                        ],
+                        incident_updates: [{
+                            body: "Investigating connectivity issues in the eastern region.",
+                            status: "INVESTIGATING",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            },
+
+            // Service-Wide Tests
+            service_wide_ddos: {
+                shouldAlert: true,
+                alertType: 'Service-Wide (DDoS)',
+                payload: {
+                    incident: {
+                        name: "Network Security Event",
+                        status: "INVESTIGATING",
+                        impact: "major",
+                        created_at: new Date().toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/incidents/test",
+                        incident_updates: [{
+                            body: "We are currently mitigating a DDoS attack. Some customers may experience intermittent connectivity.",
+                            status: "INVESTIGATING",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            },
+            service_wide_billing: {
+                shouldAlert: true,
+                alertType: 'Service-Wide (Billing)',
+                payload: {
+                    incident: {
+                        name: "Customer Portal Issues",
+                        status: "INVESTIGATING",
+                        impact: "minor",
+                        created_at: new Date().toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/incidents/test",
+                        incident_updates: [{
+                            body: "The billing and payment system is currently experiencing issues. Customers may be unable to process payments.",
+                            status: "INVESTIGATING",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            },
+            service_wide_sip: {
+                shouldAlert: true,
+                alertType: 'Service-Wide (SIP)',
+                payload: {
+                    incident: {
+                        name: "Registration Issues",
+                        status: "INVESTIGATING",
+                        impact: "major",
+                        created_at: new Date().toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/incidents/test",
+                        incident_updates: [{
+                            body: "We are investigating SIP registration issues affecting multiple regions.",
+                            status: "INVESTIGATING",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            },
+            service_wide_all_servers: {
+                shouldAlert: true,
+                alertType: 'Service-Wide (All Servers)',
+                payload: {
+                    incident: {
+                        name: "Platform Connectivity Issues",
+                        status: "INVESTIGATING",
+                        impact: "major",
+                        created_at: new Date().toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/incidents/test",
+                        incident_updates: [{
+                            body: "All servers are experiencing connectivity issues. Our team is working to resolve this as quickly as possible.",
+                            status: "INVESTIGATING",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            },
+            critical_incident: {
+                shouldAlert: true,
+                alertType: 'Critical Severity',
+                payload: {
+                    incident: {
+                        name: "Service Disruption",
+                        status: "INVESTIGATING",
+                        impact: "critical",
+                        created_at: new Date().toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/incidents/test",
+                        incident_updates: [{
+                            body: "We are investigating a critical service disruption.",
+                            status: "INVESTIGATING",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            },
+
+            // Non-Relevant Tests
+            london_incident: {
+                shouldAlert: false,
+                alertType: 'Other Location',
+                payload: {
+                    incident: {
+                        name: "London Server Maintenance",
+                        status: "MONITORING",
+                        impact: "minor",
+                        created_at: new Date().toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/incidents/test",
+                        incident_updates: [{
+                            body: "Scheduled maintenance on London servers.",
+                            status: "MONITORING",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            },
+            la_maintenance: {
+                shouldAlert: false,
+                alertType: 'Other Location',
+                payload: {
+                    maintenance: {
+                        name: "Los Angeles Server Upgrade",
+                        status: "SCHEDULED",
+                        scheduled_for: new Date(Date.now() + 86400000).toISOString(),
+                        scheduled_until: new Date(Date.now() + 90000000).toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/maintenance/test",
+                        maintenance_updates: [{
+                            body: "Scheduled upgrade for LA datacenter equipment.",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            },
+            minor_other: {
+                shouldAlert: false,
+                alertType: 'Other Location',
+                payload: {
+                    incident: {
+                        name: "Chicago Minor Degradation",
+                        status: "MONITORING",
+                        impact: "minor",
+                        created_at: new Date().toISOString(),
+                        id: "test-" + Date.now(),
+                        url: "https://status.voip.ms/incidents/test",
+                        incident_updates: [{
+                            body: "Minor performance degradation in Chicago region.",
+                            status: "MONITORING",
+                            created_at: new Date().toISOString()
+                        }]
+                    }
+                }
+            }
+        };
+
         async function sendTestWebhook() {
             const webhookUrl = document.getElementById('webhookUrl').value.trim();
             const testType = document.getElementById('testType').value;
             const resultDiv = document.getElementById('result');
-            
-            // Validate inputs
+
             if (!webhookUrl) {
                 showResult('Please enter your webhook URL', 'error');
                 return;
             }
-            
-            // Create test payload based on type
-            let payload;
-            
-            switch(testType) {
-                case 'incident':
-                    payload = {
-                        incident: {
-                            name: "New York Server Connection Issues",
-                            status: "INVESTIGATING",
-                            impact: "major",
-                            created_at: new Date().toISOString(),
-                            id: "test-" + Date.now(),
-                            url: "https://status.example.com/incidents/test",
-                            incident_updates: [{
-                                body: "We are investigating connection issues affecting our New York datacenter.",
-                                status: "INVESTIGATING",
-                                created_at: new Date().toISOString()
-                            }]
-                        }
-                    };
-                    break;
-                
-                case 'resolved':
-                    payload = {
-                        incident: {
-                            name: "New York Server Connection Issues",
-                            status: "RESOLVED",
-                            impact: "major",
-                            created_at: new Date().toISOString(),
-                            resolved_at: new Date().toISOString(),
-                            id: "test-" + Date.now(),
-                            url: "https://status.example.com/incidents/test",
-                            incident_updates: [{
-                                body: "All services have been restored. Thank you for your patience.",
-                                status: "RESOLVED",
-                                created_at: new Date().toISOString()
-                            }]
-                        }
-                    };
-                    break;
-                
-                case 'component':
-                    payload = {
-                        component: {
-                            name: "New York API Server",
-                            status: "DEGRADEDPERFORMANCE",
-                            created_at: new Date().toISOString(),
-                            id: "test-" + Date.now()
-                        },
-                        component_update: {
-                            new_status: "DEGRADEDPERFORMANCE",
-                            created_at: new Date().toISOString()
-                        },
-                        page: {
-                            url: "https://status.example.com"
-                        }
-                    };
-                    break;
-                
-                case 'other':
-                    payload = {
-                        incident: {
-                            name: "London Server Maintenance",
-                            status: "MONITORING",
-                            impact: "minor",
-                            created_at: new Date().toISOString(),
-                            id: "test-" + Date.now(),
-                            url: "https://status.example.com/incidents/test",
-                            incident_updates: [{
-                                body: "Scheduled maintenance on London servers.",
-                                status: "MONITORING",
-                                created_at: new Date().toISOString()
-                            }]
-                        }
-                    };
-                    break;
+
+            const testConfig = testPayloads[testType];
+            if (!testConfig) {
+                showResult('Invalid test type selected', 'error');
+                return;
             }
-            
-            const payloadString = JSON.stringify(payload);
-            
+
             try {
                 showResult('Sending webhook...', 'info');
-                
-                // Send webhook (no signature needed for VoIP.ms)
+
                 const response = await fetch(webhookUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: payloadString
+                    body: JSON.stringify(testConfig.payload)
                 });
-                
+
                 const result = await response.json();
-                
+
                 if (response.ok) {
-                    let message = '✅ Webhook sent successfully!<br><br>';
-                    message += `Status: ${response.status}<br>`;
-                    message += `Response: ${JSON.stringify(result)}<br><br>`;
-                    
-                    if (testType === 'other') {
-                        message += '⚠️ This was a "London" incident - it should NOT trigger a Slack alert.<br>';
-                        message += 'Check webhook.log to confirm it was ignored.';
+                    let message = '<strong>Webhook sent successfully!</strong><br><br>';
+                    message += `<strong>Test:</strong> ${testConfig.alertType}<br>`;
+                    message += `<strong>HTTP Status:</strong> ${response.status}<br>`;
+                    message += `<strong>Response:</strong> ${JSON.stringify(result)}<br><br>`;
+
+                    if (testConfig.shouldAlert) {
+                        message += '<span class="badge badge-alert">SHOULD ALERT</span> ';
+                        message += 'Check your Slack channel for the notification.<br>';
                     } else {
-                        message += '📱 Check your Slack channel for the notification!<br>';
-                        message += 'Also check webhook.log in your cPanel for details.';
+                        message += '<span class="badge badge-ignore">SHOULD IGNORE</span> ';
+                        message += 'This should NOT trigger a Slack alert.<br>';
                     }
-                    
+                    message += '<br>Check <code>webhook.log</code> for processing details.';
+
                     showResult(message, 'success');
                 } else {
-                    showResult(`❌ Error: ${response.status} - ${JSON.stringify(result)}`, 'error');
+                    showResult(`Error: ${response.status} - ${JSON.stringify(result)}`, 'error');
                 }
-                
+
             } catch (error) {
-                showResult(`❌ Error: ${error.message}`, 'error');
+                showResult(`Error: ${error.message}`, 'error');
             }
         }
-        
+
         function showResult(message, type) {
             const resultDiv = document.getElementById('result');
             resultDiv.innerHTML = message;
